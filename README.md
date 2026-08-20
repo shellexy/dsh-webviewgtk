@@ -4,6 +4,10 @@
 
 注：这只是一个启动器，不包含 dsh，启动时会执行 `npx @deepseek-ai/dsh web --port 3081`
 
+## 截图
+
+![dsh-webviewgtk mainwindow](screenshot.webp)
+
 ## 依赖
 
 Debian/Ubuntu：

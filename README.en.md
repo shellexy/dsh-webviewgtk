@@ -4,6 +4,10 @@ A GTK4 + WebKitGTK 6.0 based web launcher for dsh.
 
 **Note:** This is only a launcher; it does not include dsh. When launched, it executes `npx @deepseek-ai/dsh web --port 3081`.
 
+## Screenshot
+
+![dsh-webviewgtk mainwindow](screenshot.webp)
+
 ## Dependencies
 
 Debian/Ubuntu:
