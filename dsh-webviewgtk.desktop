@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=dsh-webviewgtk
+Comment=Launch dsh web in a WebKitGTK window
+Exec=dsh-webviewgtk
+Icon=dsh-webviewgtk
+Terminal=false
+Categories=Development;
+StartupNotify=true
+StartupWMClass=dsh-webviewgtk
