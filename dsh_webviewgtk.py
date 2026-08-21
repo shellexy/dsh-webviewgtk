@@ -67,7 +67,28 @@ LOADING_HTML_TEMPLATE = """<!doctype html>
     }
     h1 {
         margin: 0.5em 0 0;
-        color: #333;
+        font-size: 2em;
+        background: linear-gradient(
+            90deg,
+            #4d6bfe,
+            #00bfff,
+            #1e90ff,
+            #4d6bfe
+        );
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        animation: dsh-gradient-flow 3s linear infinite;
+    }
+    @keyframes dsh-gradient-flow {
+        0% {
+            background-position: 0% center;
+        }
+        100% {
+            background-position: 200% center;
+        }
     }
     #log {
         position: fixed;

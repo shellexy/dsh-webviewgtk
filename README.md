@@ -2,7 +2,11 @@
 
 基于 GTK4 + WebKitGTK 6.0 的 dsh web 启动器。
 
-注：这只是一个启动器，不包含 dsh，启动时会执行 `npx @deepseek-ai/dsh web --port 3081`
+可以作为 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness/) 的 gtk4 desktop 桌面版使用。
+
+注：这只是一个启动器，不包含 dsh，也不预装任何额外插件，启动时会执行 `npx @deepseek-ai/dsh web --port 3081`
+
+目的是保证使用的是最新版官方 dsh。
 
 ## 截图
 
@@ -18,6 +22,15 @@ sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0
 
 还需要 `npx` 命令在 `PATH` 中。
 
+## 下载
+
+```bash
+git clone https://github.com/shellexy/dsh-webviewgtk.git
+cd dsh-webviewgtk
+```
+
+
+
 ## 直接运行
 
 ```bash
@@ -27,7 +40,7 @@ python3 dsh-webviewgtk.py
 启动后会：
 
 1. 打开 WebKitGTK 窗口并显示 `Loading...`；
-2. 以子进程启动 `dsh web --port 3081`；
+2. 以子进程启动 `npx @deepseek-ai/dsh web --port 3081`；
 3. 把 dsh 的标准输出/错误同时显示在 Loading 页和终端；
 4. 轮询 `http://127.0.0.1:3081`，可用后自动加载正式页面；
 5. 网页下载时弹出保存对话框；
@@ -44,7 +57,7 @@ pip install . --break-system-packages
 或：
 
 ```bash
-python3 setup.py install
+python3 setup.py install --user
 ```
 
 安装后会提供 `dsh-webviewgtk` 命令，并安装：
