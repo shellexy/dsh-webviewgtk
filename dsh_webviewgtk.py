@@ -12,6 +12,7 @@ dsh-webviewgtk - 基于 GTK4 + WebKitGTK 6.0 的 dsh web 启动器
 
 import base64
 import json
+import mimetypes
 import os
 import signal
 import subprocess
@@ -24,9 +25,10 @@ from pathlib import Path
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 gi.require_version("WebKit", "6.0")
 
-from gi.repository import GLib, Gtk, WebKit  # noqa: E402
+from gi.repository import GLib, Gdk, Gtk, WebKit  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 3081
@@ -167,6 +169,21 @@ class DshWebviewGtk:
         self.window.connect("destroy", self.on_destroy)
 
         self.webview = WebKit.WebView()
+
+        # 允许网页使用 JavaScript 访问剪贴板，并自动允许剪贴板权限请求。
+        # 这样在 dsh 网页里 Ctrl/Cmd+V 粘贴图片才能正常读取系统剪贴板。
+        settings = self.webview.get_settings()
+        settings.set_javascript_can_access_clipboard(True)
+        self.webview.connect("permission-request", self.on_permission_request)
+
+        # 捕获 Ctrl+V：如果剪贴板里有图片/图片文件，就在应用层读取，
+        # 再向页面派发一个带图片文件的 paste 事件，弥补 WebKitGTK 默认不暴露
+        # 文件管理器图片剪贴板的问题。
+        self.key_controller = Gtk.EventControllerKey.new()
+        self.key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        self.key_controller.connect("key-pressed", self.on_key_pressed)
+        self.window.add_controller(self.key_controller)
+
         self.webview.load_html(_loading_html(), None)
         self.window.set_child(self.webview)
         self.window.present()
@@ -210,7 +227,7 @@ class DshWebviewGtk:
         """启动 dsh web 子进程，并开启输出读取和服务就绪监测线程。"""
         try:
             self.process = subprocess.Popen(
-                ["npx", "@deepseek-ai/dsh", "web", "--port", str(PORT)],
+                ["npx", "--loglevel", "verbose", "--yes", "@deepseek-ai/dsh", "web", "--no-open", "--port", str(PORT)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -263,7 +280,7 @@ class DshWebviewGtk:
         script = (
             "var el = document.getElementById('log');"
             f"el.textContent += {safe_line};"
-            "window.scrollTo(0, document.body.scrollHeight);"
+            "el.scrollTop = el.scrollHeight;"
         )
         try:
             self.webview.evaluate_javascript(script, -1, None, None, None, None, None)
@@ -287,6 +304,143 @@ class DshWebviewGtk:
         print(f"服务已就绪，加载 {URL}", flush=True)
         self.webview.load_uri(URL)
         return False
+
+    def on_permission_request(self, webview, permission_request):
+        """自动允许剪贴板读取权限，用于支持粘贴图片。"""
+        if isinstance(permission_request, WebKit.ClipboardPermissionRequest):
+            permission_request.allow()
+            print("允许网页访问剪贴板", flush=True)
+            return True
+        return False
+
+    def on_key_pressed(self, controller, keyval, keycode, state):
+        """在 WebView 中按下 Ctrl+V 时，优先读取系统剪贴板中的图片。"""
+        if not self.ready:
+            return False
+        if keyval not in (Gdk.KEY_v, Gdk.KEY_V):
+            return False
+        if not (state & Gdk.ModifierType.CONTROL_MASK):
+            return False
+
+        clipboard = self.window.get_display().get_clipboard()
+        formats = clipboard.get_formats()
+        if formats is None:
+            return False
+
+        image_mime = (
+            formats.contain_mime_type("image/png")
+            or formats.contain_mime_type("image/jpeg")
+            or formats.contain_mime_type("image/gif")
+            or formats.contain_mime_type("image/webp")
+        )
+        uri_list = (
+            formats.contain_mime_type("text/uri-list")
+            or formats.contain_mime_type("x-special/gnome-copied-files")
+        )
+
+        if image_mime:
+            self._paste_clipboard_texture(clipboard)
+            return True
+        if uri_list:
+            self._paste_clipboard_uri(clipboard)
+            return True
+        return False
+
+    def _paste_clipboard_texture(self, clipboard):
+        """从剪贴板读取图片纹理（image/png 等），转成 PNG 后注入页面。"""
+        clipboard.read_texture_async(None, self._on_clipboard_texture_read, None)
+
+    def _on_clipboard_texture_read(self, clipboard, result, user_data):
+        try:
+            texture = clipboard.read_texture_finish(result)
+        except Exception:
+            texture = None
+        if texture is None:
+            return
+
+        try:
+            png_bytes = texture.save_to_png_bytes().get_data()
+        except Exception as exc:
+            print(f"读取剪贴板图片失败：{exc}", file=sys.stderr)
+            return
+
+        self._inject_pasted_image(png_bytes, "image/png")
+
+    def _paste_clipboard_uri(self, clipboard):
+        """从剪贴板读取 text/uri-list，如果是本地图片文件则读取并注入页面。"""
+        clipboard.read_async(
+            ["text/uri-list"],
+            GLib.PRIORITY_DEFAULT,
+            None,
+            self._on_clipboard_uri_read,
+            None,
+        )
+
+    def _on_clipboard_uri_read(self, clipboard, result, user_data):
+        try:
+            stream, mime_type = clipboard.read_finish(result)
+            if stream is None:
+                return
+            data_bytes = stream.read_bytes(65536).get_data()
+            stream.close()
+        except Exception:
+            return
+
+        try:
+            text = data_bytes.decode("utf-8", "replace")
+        except Exception:
+            return
+
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                path, _host = GLib.filename_from_uri(line)
+            except Exception:
+                continue
+            path_obj = Path(path)
+            if not path_obj.is_file():
+                continue
+            mime, _ = mimetypes.guess_type(str(path_obj))
+            if not mime or not mime.startswith("image/"):
+                continue
+            try:
+                image_data = path_obj.read_bytes()
+            except Exception:
+                continue
+            self._inject_pasted_image(image_data, mime)
+            return
+
+    def _inject_pasted_image(self, image_data, mime):
+        """把图片字节作为 File 注入页面当前输入框，并派发 paste 事件。"""
+        encoded = base64.b64encode(image_data).decode("ascii")
+        extension = mimetypes.guess_extension(mime) or ".png"
+        filename = f"pasted-image{extension}"
+        script = f"""
+            (function() {{
+                const b64 = "{encoded}";
+                const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                const file = new File([bytes], "{filename}", {{ type: "{mime}" }});
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                const ev = new ClipboardEvent("paste", {{
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt
+                }});
+                const target = document.activeElement
+                    && document.activeElement !== document.body
+                    ? document.activeElement
+                    : (document.querySelector('textarea, input, [contenteditable="true"]') || document.body);
+                target.dispatchEvent(ev);
+            }})();
+        """
+        print("向页面注入剪贴板图片", flush=True)
+        try:
+            self.webview.evaluate_javascript(script, -1, None, None, None, None, None)
+        except Exception as exc:
+            print(f"向页面注入粘贴图片失败：{exc}", file=sys.stderr)
 
     # ---------- 下载处理 ----------
 

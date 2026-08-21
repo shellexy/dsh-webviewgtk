@@ -4,7 +4,9 @@
 
 可以作为 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness/) 的 gtk4 desktop 桌面版使用。
 
-注：这只是一个启动器，不包含 dsh，也不预装任何额外插件，启动时会执行 `npx @deepseek-ai/dsh web --port 3081`
+注：这只是一个启动器，不包含 dsh，也不预装任何额外插件，
+
+启动时会执行 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`
 
 目的是保证使用的是最新版官方 dsh。
 
@@ -40,7 +42,7 @@ python3 dsh-webviewgtk.py
 启动后会：
 
 1. 打开 WebKitGTK 窗口并显示 `Loading...`；
-2. 以子进程启动 `npx @deepseek-ai/dsh web --port 3081`；
+2. 以子进程启动 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`；
 3. 把 dsh 的标准输出/错误同时显示在 Loading 页和终端；
 4. 轮询 `http://127.0.0.1:3081`，可用后自动加载正式页面；
 5. 网页下载时弹出保存对话框；

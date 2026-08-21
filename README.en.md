@@ -4,7 +4,9 @@ A dsh web launcher based on GTK4 + WebKitGTK 6.0.
 
 Can be used as a GTK4 desktop frontend for [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness/).
 
-**Note:** This is just a launcher – it does not include dsh itself, nor does it pre‑install any extra plugins. When launched, it executes `npx @deepseek-ai/dsh web --port 3081`.
+**Note:** This is just a launcher – it does not include dsh itself, nor does it pre‑install any extra plugins. 
+
+When launched, it executes `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`.
 
 The goal is to always use the latest official dsh version.
 
@@ -38,7 +40,7 @@ python3 dsh-webviewgtk.py
 When launched, it will:
 
 1. Open a WebKitGTK window and display `Loading...`;
-2. Start `npx @deepseek-ai/dsh web --port 3081` as a child process;
+2. Start `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081` as a child process;
 3. Show dsh's stdout/stderr both on the loading page and in the terminal;
 4. Poll `http://127.0.0.1:3081` and automatically load the main page once available;
 5. Show a save dialog when the page triggers a download;
