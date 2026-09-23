@@ -39,12 +39,13 @@ python3 dsh-webviewgtk.py
 
 When launched, it will:
 
-1. Open a WebKitGTK window and display `Loading...`;
+1. Open a WebKitGTK window with a centered icon and `Loading...`;
 2. Start `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081` as a child process;
-3. Show dsh's stdout/stderr both on the loading page and in the terminal;
-4. Poll `http://127.0.0.1:3081` and automatically load the main page once available;
-5. Show a save dialog when the page triggers a download;
-6. Terminate the entire dsh process tree when the window is closed.
+3. Show dsh's stdout/stderr both on the loading page and in the terminal, with the log area auto-scrolling to the bottom;
+4. Parse the tokenized URL from dsh output (for example `dsh web: http://127.0.0.1:3081/?token=...`) and automatically load it once available;
+5. Support pasting images from the system clipboard into web page input fields;
+6. Show a save dialog when the page triggers a download;
+7. Terminate the entire dsh process tree when the window is closed.
 
 ## Installation
 

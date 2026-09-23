@@ -41,12 +41,13 @@ python3 dsh-webviewgtk.py
 
 启动后会：
 
-1. 打开 WebKitGTK 窗口并显示 `Loading...`；
+1. 打开 WebKitGTK 窗口，显示居中的图标和 `Loading...`；
 2. 以子进程启动 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`；
-3. 把 dsh 的标准输出/错误同时显示在 Loading 页和终端；
-4. 轮询 `http://127.0.0.1:3081`，可用后自动加载正式页面；
-5. 网页下载时弹出保存对话框；
-6. 关闭窗口时结束整个 dsh 进程树。
+3. 把 dsh 的标准输出/错误同时显示在 Loading 页和终端，日志区域自动滚动到底部；
+4. 从 dsh 输出中解析带 token 的访问地址（例如 `dsh web: http://127.0.0.1:3081/?token=...`），解析成功后自动加载该地址；
+5. 支持从系统剪贴板粘贴图片到网页输入框；
+6. 网页下载时弹出保存对话框；
+7. 关闭窗口时结束整个 dsh 进程树。
 
 ## 安装
 

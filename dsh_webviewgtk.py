@@ -14,12 +14,12 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 import gi
@@ -36,6 +36,21 @@ URL = f"http://{HOST}:{PORT}"
 APP_NAME = "dsh-webviewgtk"
 ICON_NAME = APP_NAME
 ICON_FILE = Path(__file__).resolve().parent / f"{APP_NAME}.svg"
+
+# dsh 新版本启动后会在输出里打印带 token 的访问地址，例如：
+#   dsh web: http://127.0.0.1:3081/?token=xxxxxxxx
+# 去掉 ANSI 转义后再从输出行里提取这个 URL。
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_READY_URL_RE = re.compile(
+    r"dsh web:\s*(https?://(?:127\.0\.0\.1|localhost):\d+/(?:\?token=[^\s]+)?)"
+)
+
+
+def _extract_ready_url(line):
+    """从 dsh 输出行中提取带 token 的本地访问地址。"""
+    cleaned = _ANSI_ESCAPE_RE.sub("", line)
+    match = _READY_URL_RE.search(cleaned)
+    return match.group(1) if match else None
 
 
 def _icon_candidates():
@@ -152,6 +167,7 @@ class DshWebviewGtk:
         GLib.set_prgname(APP_NAME)
 
         self.ready = False
+        self._ready_url_found = False
         self.process = None
         self._closing = False
         self._download_dialog = None
@@ -224,7 +240,7 @@ class DshWebviewGtk:
             return None
 
     def start_dsh(self):
-        """启动 dsh web 子进程，并开启输出读取和服务就绪监测线程。"""
+        """启动 dsh web 子进程，并开启输出读取线程。"""
         try:
             self.process = subprocess.Popen(
                 ["npx", "--loglevel", "verbose", "--yes", "@deepseek-ai/dsh", "web", "--no-open", "--port", str(PORT)],
@@ -241,10 +257,13 @@ class DshWebviewGtk:
             return
 
         threading.Thread(target=self._reader_loop, daemon=True).start()
-        threading.Thread(target=self._monitor_loop, daemon=True).start()
 
     def _reader_loop(self):
-        """读取 dsh 输出：同步写标准输出，同时追加到 WebView 的 Loading 页。"""
+        """读取 dsh 输出：同步写标准输出，同时追加到 WebView 的 Loading 页。
+
+        dsh 新版本会在输出里打印带 token 的访问地址，因此这里直接解析输出行，
+        不再轮询端口。这样可以正确加载带 token 的正式页面。
+        """
         try:
             assert self.process is not None and self.process.stdout is not None
             for raw_line in self.process.stdout:
@@ -252,24 +271,17 @@ class DshWebviewGtk:
                 sys.stdout.flush()
                 line = raw_line.rstrip("\n")
                 GLib.idle_add(self.append_log, line)
+
+                if not self._ready_url_found:
+                    ready_url = _extract_ready_url(line)
+                    if ready_url:
+                        self._ready_url_found = True
+                        GLib.idle_add(self.on_ready, ready_url)
         except Exception as exc:
             print(f"读取 dsh 输出出错：{exc}", file=sys.stderr)
-
-    def _monitor_loop(self):
-        """轮询 http://127.0.0.1:3081，可用后让 WebView 加载正式页面。"""
-        while not self.ready:
-            if self._closing:
-                return
-            if self.process is None or self.process.poll() is not None:
+        finally:
+            if not self.ready and not self._closing:
                 GLib.idle_add(self.on_dsh_exited)
-                return
-            try:
-                with urllib.request.urlopen(URL, timeout=0.5) as response:
-                    response.read(1)
-                GLib.idle_add(self.on_ready)
-                return
-            except Exception:
-                time.sleep(0.5)
 
     def append_log(self, line):
         """向 Loading 页追加一行日志；页面切换后不再追加。"""
@@ -294,15 +306,18 @@ class DshWebviewGtk:
             return False
         self.append_log("dsh 进程已退出，未能在 127.0.0.1:3081 启动服务。")
         print("dsh 进程已退出", file=sys.stderr, flush=True)
+        self._finish_shutdown()
         return False
 
-    def on_ready(self):
-        """服务就绪，切换到正式页面。"""
+    def on_ready(self, url=None):
+        """服务就绪，加载 dsh 输出中解析出的正式页面。"""
         if self.ready or self._closing:
             return False
         self.ready = True
-        print(f"服务已就绪，加载 {URL}", flush=True)
-        self.webview.load_uri(URL)
+        if not url:
+            url = URL
+        print(f"服务已就绪，加载 {url}", flush=True)
+        self.webview.load_uri(url)
         return False
 
     def on_permission_request(self, webview, permission_request):
