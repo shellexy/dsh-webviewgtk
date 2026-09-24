@@ -44,8 +44,9 @@ When launched, it will:
 3. Show dsh's stdout/stderr both on the loading page and in the terminal, with the log area auto-scrolling to the bottom;
 4. Parse the tokenized URL from dsh output (for example `dsh web: http://127.0.0.1:3081/?token=...`) and automatically load it once available;
 5. Support pasting images from the system clipboard into web page input fields;
-6. Show a save dialog when the page triggers a download;
-7. Terminate the entire dsh process tree when the window is closed.
+6. Open external links or links requesting a new window in the system default application (http, https, mailto, tel, ftp, magnet, etc.);
+7. Show a save dialog when the page triggers a download;
+8. Terminate the entire dsh process tree when the window is closed.
 
 ## Installation
 

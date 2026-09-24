@@ -21,14 +21,16 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
+gi.require_version("Gio", "2.0")
 gi.require_version("WebKit", "6.0")
 
-from gi.repository import GLib, Gdk, Gtk, WebKit  # noqa: E402
+from gi.repository import GLib, Gdk, Gio, Gtk, WebKit  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 3081
@@ -36,6 +38,22 @@ URL = f"http://{HOST}:{PORT}"
 APP_NAME = "dsh-webviewgtk"
 ICON_NAME = APP_NAME
 ICON_FILE = Path(__file__).resolve().parent / f"{APP_NAME}.svg"
+
+# 允许交给系统默认应用打开的外部 URL 协议白名单。
+# 如果还需要支持其他自定义协议，直接往这个集合里添加即可，例如：
+# "obsidian", "vscode", "slack", "zoommtg" 等。
+ALLOWED_EXTERNAL_SCHEMES = {
+    "http",
+    "https",
+    "mailto",
+    "tel",
+    "sms",
+    "ftp",
+    "ftps",
+    "magnet",
+    "irc",
+    "ircs",
+}
 
 # dsh 新版本启动后会在输出里打印带 token 的访问地址，例如：
 #   dsh web: http://127.0.0.1:3081/?token=xxxxxxxx
@@ -190,7 +208,12 @@ class DshWebviewGtk:
         # 这样在 dsh 网页里 Ctrl/Cmd+V 粘贴图片才能正常读取系统剪贴板。
         settings = self.webview.get_settings()
         settings.set_javascript_can_access_clipboard(True)
+        settings.set_javascript_can_open_windows_automatically(True)
         self.webview.connect("permission-request", self.on_permission_request)
+
+        # 网页通过 target=_blank / window.open 请求新窗口时，
+        # 交给系统默认浏览器打开外链。
+        self.webview.connect("create", self.on_create)
 
         # 捕获 Ctrl+V：如果剪贴板里有图片/图片文件，就在应用层读取，
         # 再向页面派发一个带图片文件的 paste 事件，弥补 WebKitGTK 默认不暴露
@@ -327,6 +350,37 @@ class DshWebviewGtk:
             print("允许网页访问剪贴板", flush=True)
             return True
         return False
+
+    def on_create(self, webview, navigation_action):
+        """网页请求新窗口时，用系统默认浏览器打开外链。"""
+        try:
+            uri = navigation_action.get_request().get_uri()
+        except Exception:
+            return None
+
+        if uri:
+            self.open_external_uri(uri)
+        return None
+
+    @staticmethod
+    def open_external_uri(uri):
+        """按协议白名单调用系统默认应用打开外链。"""
+        if not uri:
+            return
+
+        scheme = urlparse(uri).scheme.lower()
+        if scheme not in ALLOWED_EXTERNAL_SCHEMES:
+            print(f"忽略不在白名单中的外部协议：{uri}", file=sys.stderr, flush=True)
+            return
+
+        try:
+            opened = Gio.AppInfo.launch_default_for_uri(uri, None)
+            if opened:
+                print(f"用默认应用打开：{uri}", flush=True)
+            else:
+                print(f"无法用默认应用打开：{uri}", file=sys.stderr, flush=True)
+        except Exception as exc:
+            print(f"打开外部链接失败：{exc}", file=sys.stderr)
 
     def on_key_pressed(self, controller, keyval, keycode, state):
         """在 WebView 中按下 Ctrl+V 时，优先读取系统剪贴板中的图片。"""
