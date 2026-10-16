@@ -10,7 +10,7 @@ HERE = Path(__file__).resolve().parent
 
 setup(
     name="dsh-webviewgtk",
-    version="0.1.0",
+    version="0.2.0",
     description="Launch dsh web in a WebKitGTK 6.0 / GTK4 window",
     long_description=(HERE / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
@@ -22,7 +22,7 @@ setup(
     },
     data_files=[
         ("share/icons/hicolor/scalable/apps", ["dsh-webviewgtk.svg"]),
-        ("share/applications", ["dsh-webviewgtk.desktop"]),
+        ("share/applications", ["com.github.shellexy.DshWebviewGtk.desktop"]),
     ],
     python_requires=">=3.8",
 )

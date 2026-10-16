@@ -8,3 +8,4 @@ Terminal=false
 Categories=Development;
 StartupNotify=true
 StartupWMClass=dsh-webviewgtk
+X-GNOME-UsesNotifications=true
