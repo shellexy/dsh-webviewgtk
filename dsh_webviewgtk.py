@@ -36,6 +36,10 @@ HOST = "127.0.0.1"
 PORT = 3081
 URL = f"http://{HOST}:{PORT}"
 APP_NAME = "dsh-webviewgtk"
+# 应用 id 同时是 GApplication/D-Bus 身份与通知分组键。
+# 只在 dsh 已经打印出带 token 地址时才回退到固定端口，因此该地址的 origin
+# 对通知桥是可信的；若自行改用别的端口，请同步修改 PORT。
+APP_ID = "com.github.shellexy.DshWebviewGtk"
 ICON_NAME = APP_NAME
 ICON_FILE = Path(__file__).resolve().parent / f"{APP_NAME}.svg"
 
@@ -193,7 +197,23 @@ class DshWebviewGtk:
         self._download_dialog_accepted = False
         self._shutdown_pgid = None
         self._shutdown_started = None
-        self.main_loop = GLib.MainLoop()
+        self._shutdown_done = False
+        self._allowed_origin = urlparse(URL).netloc
+        # 真正加载过 dsh 地址后才置位：导航早期 get_uri() 为空时据此仍可信任桥的消息。
+        self._trusted_uri = None
+
+        # GApplication 身份用于 D-Bus 通知与点击默认动作；NON_UNIQUE 允许同时开多个窗口。
+        # 通知上的应用名与图标由名称与应用 id 一致的 desktop 文件决定。
+        self.app = Gtk.Application(
+            application_id=APP_ID,
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
+        # GApplication 生命周期必须完整：缺少 activate 处理时 GTK 会在注册阶段告警，
+        # 且非唯一应用（NON_UNIQUE）退出时的行为不确定。
+        self.app.connect("activate", self.on_app_activate)
+        self.app.register(None)
+        # 窗口销毁后应用不自动退出：dsh 进程树还在收尾，退出由 _finish_shutdown 决定。
+        self.app.hold()
 
         self.window = Gtk.Window(title=APP_NAME)
         self._register_icon()
@@ -201,6 +221,7 @@ class DshWebviewGtk:
         self.window.set_icon_name(ICON_NAME)
         self.window.connect("close-request", self.on_close_request)
         self.window.connect("destroy", self.on_destroy)
+        self.app.add_window(self.window)
 
         self.webview = WebKit.WebView()
 
@@ -209,23 +230,31 @@ class DshWebviewGtk:
         settings = self.webview.get_settings()
         settings.set_javascript_can_access_clipboard(True)
         settings.set_javascript_can_open_windows_automatically(True)
+        # WebKit 的开发者工具默认关闭，F12 就是靠它打开的。
+        settings.set_enable_developer_extras(True)
         self.webview.connect("permission-request", self.on_permission_request)
 
         # 网页通过 target=_blank / window.open 请求新窗口时，
         # 交给系统默认浏览器打开外链。
         self.webview.connect("create", self.on_create)
 
+        # 桌面通知桥：脚本在文档开始注入（早于页面自身脚本），
+        # 页面用 window.webkit.messageHandlers.<通道> 把通知意图交回外壳。
+
         # 捕获 Ctrl+V：如果剪贴板里有图片/图片文件，就在应用层读取，
         # 再向页面派发一个带图片文件的 paste 事件，弥补 WebKitGTK 默认不暴露
         # 文件管理器图片剪贴板的问题。
+        # 同一个控制器也负责 F12 / Ctrl+Shift+I 打开开发者工具。
         self.key_controller = Gtk.EventControllerKey.new()
         self.key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         self.key_controller.connect("key-pressed", self.on_key_pressed)
         self.window.add_controller(self.key_controller)
 
+
         self.webview.load_html(_loading_html(), None)
         self.window.set_child(self.webview)
         self.window.present()
+
 
         # WebKitGTK 6.0 的下载信号位于 NetworkSession 上。
         network_session = self.webview.get_network_session()
@@ -261,6 +290,21 @@ class DshWebviewGtk:
             return Gdk.Display.get_default()
         except Exception:
             return None
+
+    def on_app_activate(self, _application):
+        """GApplication 激活：唯一窗口已存在时把它带到前台。"""
+        try:
+            self.window.present()
+        except Exception:
+            # 激活先于窗口构建完成时窗口还不存在；此时无需处理。
+            pass
+
+    def focus_window(self):
+        """把窗口带到前台。"""
+        try:
+            self.window.present()
+        except Exception as exc:
+            print(f"聚焦窗口失败：{exc}", file=sys.stderr)
 
     def start_dsh(self):
         """启动 dsh web 子进程，并开启输出读取线程。"""
@@ -339,6 +383,7 @@ class DshWebviewGtk:
         self.ready = True
         if not url:
             url = URL
+        self._trusted_uri = url
         print(f"服务已就绪，加载 {url}", flush=True)
         self.webview.load_uri(url)
         return False
@@ -382,8 +427,32 @@ class DshWebviewGtk:
         except Exception as exc:
             print(f"打开外部链接失败：{exc}", file=sys.stderr)
 
+    def toggle_inspector(self):
+        """F12 / Ctrl+Shift+I：打开或收起 WebKit 开发者工具。"""
+        try:
+            inspector = self.webview.get_inspector()
+            if inspector.is_attached():
+                inspector.close()
+                print("已关闭开发者工具", flush=True)
+            else:
+                inspector.show()
+                print("已打开开发者工具（F12 或 Ctrl+Shift+I 可关闭）", flush=True)
+        except Exception as exc:
+            print(f"打开开发者工具失败：{exc}", file=sys.stderr)
+
     def on_key_pressed(self, controller, keyval, keycode, state):
-        """在 WebView 中按下 Ctrl+V 时，优先读取系统剪贴板中的图片。"""
+        """捕获 F12 / Ctrl+Shift+I 打开开发者工具，以及 Ctrl+V 粘贴图片。"""
+        # 开发者工具必须在 ready 之前也能打开：加载页卡住时正是要它来查。
+        if keyval == Gdk.KEY_F12:
+            self.toggle_inspector()
+            return True
+        if keyval in (Gdk.KEY_i, Gdk.KEY_I):
+            shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
+            control = bool(state & Gdk.ModifierType.CONTROL_MASK)
+            if shift and control:
+                self.toggle_inspector()
+                return True
+
         if not self.ready:
             return False
         if keyval not in (Gdk.KEY_v, Gdk.KEY_V):
@@ -647,13 +716,21 @@ class DshWebviewGtk:
         return True
 
     def _finish_shutdown(self):
-        if self.main_loop.is_running():
-            self.main_loop.quit()
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
+        # 悬空引用释放后应用才允许退出；兼容没有 hold()/release() 的旧 GIO。
+        try:
+            self.app.release()
+        except Exception:
+            pass
+        self.app.quit()
 
 
 def main():
     app = DshWebviewGtk()
-    app.main_loop.run()
+    # 主循环跑在 GApplication 的 GLib 上下文里，退出由 _finish_shutdown 决定。
+    app.app.run([])
 
 
 if __name__ == "__main__":
