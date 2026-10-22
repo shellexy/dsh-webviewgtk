@@ -92,7 +92,8 @@ def main():
         app.quit()
         return GLib.SOURCE_REMOVE
 
-    view.load_html(PAGE, f"http://{shell.HOST}:{shell.PORT}/")
+    # 探针只需要一个同源 base URI，不需要真实监听端口。
+    view.load_html(PAGE, f"http://{shell.HOST}:3081/")
     window.present()
     GLib.timeout_add_seconds(3, finish)
     app.run([])

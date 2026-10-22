@@ -6,7 +6,7 @@ Can be used as a GTK4 desktop frontend for [deepseek-harness](https://github.com
 
 **Note:** This is just a launcher – it does not include dsh itself, nor does it pre‑install any extra plugins. 
 
-When launched, it executes `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`.
+When launched, it executes `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 0`.
 
 The goal is to always use the latest official dsh version.
 
@@ -40,14 +40,15 @@ python3 dsh-webviewgtk.py
 When launched, it will:
 
 1. Open a WebKitGTK window with a centered icon and `Loading...`;
-2. Start `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081` as a child process;
+2. Start `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 0` as a child process, letting dsh choose a free port;
 3. Show dsh's stdout/stderr both on the loading page and in the terminal, with the log area auto-scrolling to the bottom;
-4. Parse the tokenized URL from dsh output (for example `dsh web: http://127.0.0.1:3081/?token=...`) and automatically load it once available;
+4. Parse the tokenized URL from dsh output (for example `dsh web: http://127.0.0.1:54321/?token=...`, with the port chosen by dsh) and automatically load it once available;
 5. Support pasting images from the system clipboard into web page input fields;
 6. Open external links or links requesting a new window in the system default application (http, https, mailto, tel, ftp, magnet, etc.);
 7. Show a save dialog when the page triggers a download;
 8. Show a system desktop notification while the window is not in the foreground (see below);
-9. Terminate the entire dsh process tree when the window is closed.
+9. Terminate the entire dsh process tree when the window is closed;
+10. Run as a single instance: launching it again only activates the existing window and does not start another dsh process.
 
 ## Developer tools
 

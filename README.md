@@ -6,7 +6,7 @@
 
 注：这只是一个启动器，不包含 dsh，也不预装任何额外插件，
 
-启动时会执行 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`
+启动时会执行 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 0`
 
 目的是保证使用的是最新版官方 dsh。
 
@@ -42,14 +42,15 @@ python3 dsh-webviewgtk.py
 启动后会：
 
 1. 打开 WebKitGTK 窗口，显示居中的图标和 `Loading...`；
-2. 以子进程启动 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 3081`；
+2. 以子进程启动 `npx --loglevel verbose --yes @deepseek-ai/dsh web --no-open --port 0`，由 dsh 自动选择空闲端口；
 3. 把 dsh 的标准输出/错误同时显示在 Loading 页和终端，日志区域自动滚动到底部；
-4. 从 dsh 输出中解析带 token 的访问地址（例如 `dsh web: http://127.0.0.1:3081/?token=...`），解析成功后自动加载该地址；
+4. 从 dsh 输出中解析带 token 的访问地址（例如 `dsh web: http://127.0.0.1:54321/?token=...`，端口由 dsh 自动选择），解析成功后自动加载该地址；
 5. 支持从系统剪贴板粘贴图片到网页输入框；
 6. 点击外链或请求新窗口的链接时，使用系统默认应用打开（支持 http、https、mailto、tel、ftp、magnet 等协议）；
 7. 网页下载时弹出保存对话框；
 8. 窗口不在前台时弹出系统桌面通知（见下节）；
-9. 关闭窗口时结束整个 dsh 进程树。
+9. 关闭窗口时结束整个 dsh 进程树；
+10. 单实例运行：重复启动只会激活已有窗口，不会再次启动 dsh。
 
 ## 开发者工具
 

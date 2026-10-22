@@ -34,12 +34,11 @@ gi.require_version("WebKit", "6.0")
 from gi.repository import GLib, Gdk, Gio, Gtk, WebKit  # noqa: E402
 
 HOST = "127.0.0.1"
-PORT = 3081
-URL = f"http://{HOST}:{PORT}"
+# 0 表示让 dsh 自动选择空闲端口；实际访问地址从 dsh 输出中解析。
+PORT = 0
 APP_NAME = "dsh-webviewgtk"
 # 应用 id 同时是 GApplication/D-Bus 身份与通知分组键。
-# 只在 dsh 已经打印出带 token 地址时才回退到固定端口，因此该地址的 origin
-# 对通知桥是可信的；若自行改用别的端口，请同步修改 PORT。
+# dsh 使用 --port 0 自动选择端口，实际 origin 在加载解析出的地址时更新。
 APP_ID = "com.github.shellexy.DshWebviewGtk"
 ICON_NAME = APP_NAME
 ICON_FILE = Path(__file__).resolve().parent / f"{APP_NAME}.svg"
@@ -532,7 +531,7 @@ def _loading_html():
 class DshWebviewGtk:
     """主窗口、WebView、dsh 子进程及下载处理。"""
 
-    def __init__(self):
+    def __init__(self, app):
         # 让 WM_CLASS/StartupWMClass 与启动器名字一致。
         GLib.set_prgname(APP_NAME)
 
@@ -546,26 +545,19 @@ class DshWebviewGtk:
         self._shutdown_pgid = None
         self._shutdown_started = None
         self._shutdown_done = False
-        self._allowed_origin = urlparse(URL).netloc
+        self._allowed_origin = ""
         # 真正加载过 dsh 地址后才置位：导航早期 get_uri() 为空时据此仍可信任桥的消息。
         self._trusted_uri = None
         # 通知：活跃会话、待处理交互去重键，以及保活用的 Gio.Notification 引用。
         self._notifications = {}
         self._pending_keys = set()
 
-        # GApplication 身份用于 D-Bus 通知与点击默认动作；NON_UNIQUE 允许同时开多个窗口。
+        # GApplication 身份用于 D-Bus 通知、点击默认动作与单实例激活。
         # 通知上的应用名与图标由名称与应用 id 一致的 desktop 文件决定。
-        self.app = Gtk.Application(
-            application_id=APP_ID,
-            flags=Gio.ApplicationFlags.NON_UNIQUE,
-        )
+        self.app = app
         self._notification_action = Gio.SimpleAction.new("notification", GLib.VariantType.new("s"))
         self._notification_action.connect("activate", self.on_notification_action)
         self.app.add_action(self._notification_action)
-        # GApplication 生命周期必须完整：缺少 activate 处理时 GTK 会在注册阶段告警，
-        # 且非唯一应用（NON_UNIQUE）退出时的行为不确定。
-        self.app.connect("activate", self.on_app_activate)
-        self.app.register(None)
         # 窗口销毁后应用不自动退出：dsh 进程树还在收尾，退出由 _finish_shutdown 决定。
         self.app.hold()
 
@@ -843,14 +835,6 @@ class DshWebviewGtk:
         if session != "":
             GLib.timeout_add(250, self.switch_session, session)
 
-    def on_app_activate(self, _application):
-        """GApplication 激活：唯一窗口已存在时把它带到前台。"""
-        try:
-            self.window.present()
-        except Exception:
-            # 激活先于窗口构建完成时窗口还不存在；此时无需处理。
-            pass
-
     def focus_window(self):
         """把窗口带到前台。"""
         try:
@@ -953,19 +937,22 @@ class DshWebviewGtk:
         """dsh 在服务就绪前退出时给出提示。"""
         if self.ready or self._closing:
             return False
-        self.append_log("dsh 进程已退出，未能在 127.0.0.1:3081 启动服务。")
+        self.append_log("dsh 进程已退出，未能启动 dsh web 服务。")
         print("dsh 进程已退出", file=sys.stderr, flush=True)
         self._finish_shutdown()
         return False
 
-    def on_ready(self, url=None):
+    def on_ready(self, url):
         """服务就绪，加载 dsh 输出中解析出的正式页面。"""
         if self.ready or self._closing:
             return False
-        self.ready = True
         if not url:
-            url = URL
+            return False
+        self.ready = True
         self._trusted_uri = url
+        # dsh 使用 --port 0，端口只有在输出地址里才确定；通知桥信任的 origin
+        # 也必须跟随这个实际地址更新。
+        self._allowed_origin = urlparse(url).netloc
         print(f"服务已就绪，加载 {url}", flush=True)
         self.webview.load_uri(url)
         return False
@@ -1312,9 +1299,24 @@ class DshWebviewGtk:
 def main():
     # 启动横幅必须无条件打印：排查"通知为什么没来"时首先要确认跑的是哪个文件、哪一版桥。
     print(f"{APP_NAME}: {build_info()}", flush=True)
-    app = DshWebviewGtk()
-    # 通知身份与点击动作由 GApplication 提供，主循环跑在同一个 GLib 上下文里。
-    app.app.run([])
+
+    # 使用 GApplication 的默认唯一实例语义：第二次启动只会向已有实例发送 activate，
+    # 由已有窗口处理，不会再次创建窗口或启动第二个 dsh 进程。
+    app = Gtk.Application(
+        application_id=APP_ID,
+        flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
+    )
+    windows = {"main": None}
+
+    def on_activate(application):
+        window = windows["main"]
+        if window is None:
+            windows["main"] = DshWebviewGtk(application)
+        else:
+            window.focus_window()
+
+    app.connect("activate", on_activate)
+    app.run([])
 
 
 if __name__ == "__main__":
