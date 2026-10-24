@@ -2,6 +2,16 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-10-25
+
+### 修复
+
+- **中键粘贴改为粘贴 PRIMARY selection**：WebKitGTK 对 `contenteditable`（对话输入框）
+  的中键粘贴会派发普通 `paste` 事件，但事件里的 `clipboardData` 是 CLIPBOARD，页面
+  处理后又把它插入，导致粘进的是复制缓冲区而不是选中内容。现在桥在捕获阶段拦下中键
+  引发的 `paste`，由外壳通过 `Gdk.Display.get_primary_clipboard()` 读取 PRIMARY，再以
+  合成 `paste` 事件回填，复用页面自己的粘贴处理（普通 `textarea`/`input` 不受影响）。
+
 ## [0.2.0] - 2026-10-16
 
 ### 新增

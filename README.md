@@ -138,6 +138,20 @@ globalThis.__DSH_SHELL_NOTIFY_DISABLE__ = true // 关闭桌面通知
 - 控制台里连 `heartbeat` 都没有：调试标志没设上（要设 `true`，且设置后 5 秒内应出现第一条），
   或桥没注入（先看上一行 `typeof` 的结果）。
 
+## 中键粘贴
+
+在对话输入框（`contenteditable`）里按鼠标中键会粘贴 **PRIMARY selection**（当前选中的
+文字），与普通 `textarea`/单行输入框保持一致。
+
+原因：WebKitGTK 对 `contenteditable` 的中键粘贴会派发普通 `paste` 事件，但事件里的
+`clipboardData` 是 CLIPBOARD；页面据此插入就会粘进复制缓冲区。因此注入脚本在捕获阶段拦下
+中键引发的 `paste`，请外壳用 `Gdk.Display.get_primary_clipboard()` 读出 PRIMARY，再以合成
+`paste` 事件回填，页面的粘贴处理（清洗、撤销边界）保持不变。普通 `textarea`/`input` 走
+WebKit 原生插入，不需要干预。
+
+排查：`DSH_WEBVIEWGTK_DEBUG=1` 启动后，中键粘贴会在终端打印
+`回填 PRIMARY：'…'`；若为空串，说明 GTK 没读到 PRIMARY（Wayland 下主选区可能没设置）。
+
 ## 安装
 
 在仓库目录下执行：
@@ -163,6 +177,7 @@ python3 setup.py install --user
 ```bash
 python3 tests/bridge_smoke_test.py   # 通知桥脚本的解析逻辑（只需要 node）
 python3 tests/notification_probe.py  # 真实弹出一条通知，验证点击回调（需要桌面会话）
+python3 tests/primary_paste_test.py   # 中键粘贴走 PRIMARY 的桥逻辑（只需要 node）
 ```
 
 ## 图标与 StartupWMClass

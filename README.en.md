@@ -117,6 +117,21 @@ globalThis.__DSH_SHELL_NOTIFY_DISABLE__ = true // turn desktop notifications off
 - Not even `heartbeat` appears: the debug flag was not set (it must be `true`, and the first line arrives within five
   seconds), or the bridge was never injected (check the `typeof` line above first).
 
+## Middle-click paste
+
+Middle-clicking the conversation composer (a `contenteditable`) pastes the **PRIMARY selection**, matching what
+plain `textarea` and single-line inputs already do.
+
+Why it needed help: WebKitGTK dispatches an ordinary `paste` event for middle-click paste into a
+`contenteditable`, but that event's `clipboardData` is the CLIPBOARD, so a page that inserts from it pastes the
+copy buffer instead of the selected text. The injected bridge therefore intercepts the middle-click `paste` in
+the capture phase, asks the shell for the PRIMARY text, and re-enters the page's own paste path through a
+synthetic `paste` event (sanitization and undo boundaries stay intact). Plain `textarea`/`input` keep WebKit's
+native insertion and are not touched.
+
+Diagnostics: start with `DSH_WEBVIEWGTK_DEBUG=1`; a middle-click paste then prints `回填 PRIMARY：'…'` in the
+terminal. An empty string means GTK could not read the primary selection (on Wayland it may simply not be set).
+
 ## Installation
 
 In the repository directory, run:
@@ -142,6 +157,7 @@ After installation, the `dsh-webviewgtk` command will be available, and the foll
 ```bash
 python3 tests/bridge_smoke_test.py   # bridge frame parsing (needs node only)
 python3 tests/notification_probe.py  # pops one real notification to verify the click callback (needs a desktop session)
+python3 tests/primary_paste_test.py   # middle-click PRIMARY paste bridge logic (needs node only)
 ```
 
 ## Icon and StartupWMClass

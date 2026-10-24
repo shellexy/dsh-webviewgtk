@@ -47,7 +47,7 @@ ICON_FILE = Path(__file__).resolve().parent / f"{APP_NAME}.svg"
 BRIDGE_CHANNEL = "dshShellNotify"
 BRIDGE_GLOBAL = "__DSH_SHELL_NOTIFY__"
 # 桥脚本版本：改动 BRIDGE_JS_TEMPLATE 时递增，启动横幅会打印它以便确认跑的是哪一版。
-BRIDGE_VERSION = "21-teardown-reverted"
+BRIDGE_VERSION = "22-primary-paste"
 
 # 外壳通知正文的显示上限（freedesktop 通知本身也有长度限制）。
 NOTIFICATION_BODY_MAX_CHARS = 480
@@ -183,6 +183,68 @@ BRIDGE_JS_TEMPLATE = """
   send({ kind: 'diagnose', message: 'global-ready' })
   guard('init-active-session', () => { send({ kind: 'diagnose', message: 'active=' + (activeSessionId() || '(none)') }) })
   send({ kind: 'diagnose', message: 'active-ready' })
+
+  // 中键粘贴：WebKitGTK 对 contenteditable 的中键粘贴会派发 paste 事件，但事件里的
+  // clipboardData 是 CLIPBOARD，不是用户选中的 PRIMARY（普通 textarea/input 走原生插入，
+  // 因此没有这个问题）。这里拦下中键引发的 paste，请外壳读 PRIMARY 再按普通 paste 回填，
+  // 从而复用页面自己的粘贴处理（清洗、撤销边界都不变）。
+  // 时间窗只用来把"紧随中键的 paste"和键盘 Ctrl+V 区分开；WebKit 在按下中键时就会派发
+  // paste，所以 500ms 足够，也避免误吞紧接着的键盘粘贴。
+  const MIDDLE_PASTE_WINDOW_MS = 500
+  let middlePasteAt = 0
+  let middlePasteTarget = null
+  let middlePasteRequest = ''
+  let syntheticPaste = false
+  guard('install-middle-paste', () => {
+    addEventListener('mousedown', (event) => {
+      if (event.button !== 1) return
+      const target = event.target
+      if (!(target instanceof Element) || !target.isContentEditable) return
+      middlePasteAt = Date.now()
+      middlePasteTarget = target
+    }, true)
+    addEventListener('paste', (event) => {
+      if (syntheticPaste) return
+      if (middlePasteAt === 0 || Date.now() - middlePasteAt > MIDDLE_PASTE_WINDOW_MS) return
+      middlePasteAt = 0
+      // paste 事件通常以可编辑元素为目标；个别版本把它派发到聚焦元素或 document，
+      // 因此再退回当前聚焦元素判断一次。
+      const raw = event.target
+      const target = raw instanceof Element && raw.isContentEditable
+        ? raw
+        : (document.activeElement instanceof Element && document.activeElement.isContentEditable
+          ? document.activeElement
+          : null)
+      if (target === null) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      middlePasteTarget = target
+      middlePasteRequest = 'primary-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+      log('middle-paste', 'request', middlePasteRequest)
+      send({ kind: 'primary-paste', requestId: middlePasteRequest })
+    }, true)
+    globalThis.__DSH_SHELL_PRIMARY_TEXT__ = (requestId, text) => {
+      if (requestId !== middlePasteRequest) return
+      middlePasteRequest = ''
+      const value = typeof text === 'string' ? text : ''
+      const target = middlePasteTarget
+      if (value === '' || target === null) return
+      syntheticPaste = true
+      try {
+        const data = new DataTransfer()
+        data.setData('text/plain', value)
+        target.dispatchEvent(new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: data,
+        }))
+      } finally {
+        syntheticPaste = false
+        middlePasteTarget = null
+      }
+    }
+  })
+  send({ kind: 'diagnose', message: 'middle-paste-ready' })
 
   // MessageEvent.data 的取值器只观察不修改；抛错也绝不影响页面自身的消息。
   guard('install-message-hook', () => {
@@ -722,6 +784,16 @@ class DshWebviewGtk:
             # 排查时"桥是否执行到某一步"必须看得见。
             print(f"[dsh-webviewgtk] 桥诊断：{payload.get('message', '')}", flush=True)
             return False
+        if kind == "primary-paste":
+            # 中键粘贴：页面读不到 PRIMARY，只能由外壳代读再回填。
+            if not self._page_is_allowed():
+                self._debug(f"丢弃 PRIMARY 请求：页面 URI {self._current_uri()!r} 不是 {self._allowed_origin}")
+                return False
+            request_id = payload.get("requestId")
+            if not isinstance(request_id, str) or request_id == "":
+                return False
+            self._read_primary_selection(request_id)
+            return False
         if kind not in ("completed", "pending"):
             return False
 
@@ -778,6 +850,48 @@ class DshWebviewGtk:
         """DSH_WEBVIEWGTK_DEBUG=1 时把外壳侧的通知诊断打到终端。"""
         if os.environ.get("DSH_WEBVIEWGTK_DEBUG") == "1":
             print(f"[dsh-webviewgtk] {message}", file=sys.stderr, flush=True)
+
+    def _read_primary_selection(self, request_id):
+        """读取 PRIMARY selection，并异步回填给页面。
+
+        WebKitGTK 把中键粘贴派发成普通 paste 事件，但事件里的 clipboardData 是
+        CLIPBOARD；页面自己拿不到 PRIMARY，所以只能由外壳（GTK）代读。
+        """
+        display = self._get_display()
+        clipboard = None
+        if display is not None:
+            try:
+                clipboard = display.get_primary_clipboard()
+            except Exception as exc:
+                self._debug(f"取 PRIMARY 剪贴板失败：{exc}")
+        if clipboard is None:
+            self._reply_primary_selection(request_id, "")
+            return
+        try:
+            clipboard.read_text_async(None, self._on_primary_text_read, request_id)
+        except Exception as exc:
+            self._debug(f"读取 PRIMARY 失败：{exc}")
+            self._reply_primary_selection(request_id, "")
+
+    def _on_primary_text_read(self, clipboard, result, request_id):
+        try:
+            text = clipboard.read_text_finish(result) or ""
+        except Exception as exc:
+            self._debug(f"读取 PRIMARY 内容失败：{exc}")
+            text = ""
+        self._reply_primary_selection(request_id, text)
+
+    def _reply_primary_selection(self, request_id, text):
+        """把 PRIMARY 文本送回页面，由页面按普通 paste 处理。"""
+        script = (
+            "globalThis.__DSH_SHELL_PRIMARY_TEXT__?.("
+            + json.dumps(request_id) + "," + json.dumps(text) + ")"
+        )
+        self._debug(f"回填 PRIMARY：{text!r}")
+        try:
+            self.webview.evaluate_javascript(script, -1, None, None, None, None, None)
+        except Exception as exc:
+            self._debug(f"回填 PRIMARY 失败：{exc}")
 
     def _present_if_relevant(self, session, title, body):
         """主线程（延后一拍）：窗口聚焦且正是当前会话时不打扰。"""

@@ -171,6 +171,7 @@ const diagnoseExpected = [
   'global-ready',
   'active=session-a',
   'active-ready',
+  'middle-paste-ready',
   'message-hook-ready',
   'scanner-deferred readyState=loading',
   'bridge-done',
