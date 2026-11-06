@@ -37,6 +37,9 @@ HOST = "127.0.0.1"
 # 0 表示让 dsh 自动选择空闲端口；实际访问地址从 dsh 输出中解析。
 PORT = 0
 APP_NAME = "dsh-webviewgtk"
+# 窗口标题：`<网页标题> · dsh-webviewgtk`（dsh 会把 `会话标题 — 产品名` 写进
+# document.title，WebKit 的 WebView title 会跟着更新，这里再同步到窗口）。
+TITLE_SUFFIX = APP_NAME
 # 应用 id 同时是 GApplication/D-Bus 身份与通知分组键。
 # dsh 使用 --port 0 自动选择端口，实际 origin 在加载解析出的地址时更新。
 APP_ID = "com.github.shellexy.DshWebviewGtk"
@@ -89,6 +92,12 @@ def _extract_ready_url(line):
     cleaned = _ANSI_ESCAPE_RE.sub("", line)
     match = _READY_URL_RE.search(cleaned)
     return match.group(1) if match else None
+
+
+def window_title(page_title=None):
+    """窗口标题：`<网页标题> · dsh-webviewgtk`，没有网页标题时只显示外壳名。"""
+    text = (page_title or "").strip()
+    return f"{text} · {TITLE_SUFFIX}" if text else TITLE_SUFFIX
 
 
 def _notification_body(payload, kind):
@@ -632,6 +641,8 @@ class DshWebviewGtk:
         self.app.add_window(self.window)
 
         self.webview = WebKit.WebView()
+        # 窗口标题跟随网页标题（dsh 会把当前会话标题写进 document.title）。
+        self.webview.connect("notify::title", self.on_webview_title_changed)
 
         # 允许网页使用 JavaScript 访问剪贴板，并自动允许剪贴板权限请求。
         # 这样在 dsh 网页里 Ctrl/Cmd+V 粘贴图片才能正常读取系统剪贴板。
@@ -955,6 +966,18 @@ class DshWebviewGtk:
             self.window.present()
         except Exception as exc:
             print(f"聚焦窗口失败：{exc}", file=sys.stderr)
+
+    def on_webview_title_changed(self, webview, _pspec):
+        """网页标题变化时同步窗口标题：`<网页标题> · dsh-webviewgtk`。"""
+        try:
+            title = webview.get_title()
+        except Exception as exc:
+            self._debug(f"读取网页标题失败：{exc}")
+            return
+        try:
+            self.window.set_title(window_title(title))
+        except Exception as exc:
+            self._debug(f"设置窗口标题失败：{exc}")
 
     def on_window_active_changed(self, window, _pspec):
         """窗口重新获得焦点即视为已读，撤回所有已弹出的通知。"""

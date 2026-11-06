@@ -50,7 +50,8 @@ python3 dsh-webviewgtk.py
 7. 网页下载时弹出保存对话框；
 8. 窗口不在前台时弹出系统桌面通知（见下节）；
 9. 关闭窗口时结束整个 dsh 进程树；
-10. 单实例运行：重复启动只会激活已有窗口，不会再次启动 dsh。
+10. 单实例运行：重复启动只会激活已有窗口，不会再次启动 dsh；
+11. 窗口标题为 `<当前网页标题> · dsh-webviewgtk`，会随会话标题变化（网页还没有标题时只显示 `dsh-webviewgtk`）。
 
 ## 开发者工具
 
@@ -178,6 +179,7 @@ python3 setup.py install --user
 python3 tests/bridge_smoke_test.py   # 通知桥脚本的解析逻辑（只需要 node）
 python3 tests/notification_probe.py  # 真实弹出一条通知，验证点击回调（需要桌面会话）
 python3 tests/primary_paste_test.py   # 中键粘贴走 PRIMARY 的桥逻辑（只需要 node）
+python3 tests/window_title_test.py    # 窗口标题格式化与同步（纯 Python）
 ```
 
 ## 图标与 StartupWMClass

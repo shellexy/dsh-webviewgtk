@@ -48,7 +48,8 @@ When launched, it will:
 7. Show a save dialog when the page triggers a download;
 8. Show a system desktop notification while the window is not in the foreground (see below);
 9. Terminate the entire dsh process tree when the window is closed;
-10. Run as a single instance: launching it again only activates the existing window and does not start another dsh process.
+10. Run as a single instance: launching it again only activates the existing window and does not start another dsh process;
+11. Title the window `<current page title> · dsh-webviewgtk`, following the session title (just `dsh-webviewgtk` until the page has one).
 
 ## Developer tools
 
@@ -158,6 +159,7 @@ After installation, the `dsh-webviewgtk` command will be available, and the foll
 python3 tests/bridge_smoke_test.py   # bridge frame parsing (needs node only)
 python3 tests/notification_probe.py  # pops one real notification to verify the click callback (needs a desktop session)
 python3 tests/primary_paste_test.py   # middle-click PRIMARY paste bridge logic (needs node only)
+python3 tests/window_title_test.py    # window title formatting and sync (pure Python)
 ```
 
 ## Icon and StartupWMClass
