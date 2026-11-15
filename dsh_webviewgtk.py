@@ -24,6 +24,12 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+# 避免在 wayland 环境下用 Xvfb 测试时程序使用桌面 wayland
+os.environ.setdefault("gdk_backend", "x11")
+os.environ.pop("WAYLAND_DISPLAY", None)
+
+os.environ.setdefault("GTK_USE_PORTAL", "1")
+
 import gi
 
 gi.require_version("Gtk", "4.0")
