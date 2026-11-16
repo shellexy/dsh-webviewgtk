@@ -14,6 +14,32 @@
 
 ![dsh-webviewgtk mainwindow](screenshot.webp)
 
+<nav role="doc-toc" aria-label="目录">
+<div role="heading" aria-level="2">目录</div>
+<ul>
+  <li><a href="#user-content-dsh-webviewgtk">dsh-webviewgtk</a>
+    <ul>
+      <li><a href="#user-content-截图">截图</a></li>
+      <li><a href="#user-content-依赖">依赖</a></li>
+      <li><a href="#user-content-下载">下载</a></li>
+      <li><a href="#user-content-直接运行">直接运行</a></li>
+      <li><a href="#user-content-开发者工具">开发者工具</a></li>
+      <li><a href="#user-content-桌面通知">桌面通知</a>
+        <ul>
+          <li><a href="#user-content-实现中踩过的坑改动前请先读">实现中踩过的坑（改动前请先读）</a></li>
+          <li><a href="#user-content-排查">排查</a></li>
+        </ul>
+      </li>
+      <li><a href="#user-content-中键粘贴">中键粘贴</a></li>
+      <li><a href="#user-content-安装">安装</a></li>
+      <li><a href="#user-content-测试">测试</a></li>
+      <li><a href="#user-content-图标与-startupwmclass">图标与 StartupWMClass</a></li>
+      <li><a href="#user-content-已知问题">已知问题</a></li>
+    </ul>
+  </li>
+</ul>
+</nav>
+
 ## 依赖
 
 Debian/Ubuntu：
@@ -160,13 +186,7 @@ WebKit 原生插入，不需要干预。
 在仓库目录下执行：
 
 ```bash
-pip install . --break-system-packages
-```
-
-或：
-
-```bash
-python3 setup.py install --user
+./install.sh
 ```
 
 安装后会提供 `dsh-webviewgtk` 命令，并安装：

@@ -14,6 +14,32 @@ The goal is to always use the latest official dsh version.
 
 ![dsh-webviewgtk mainwindow](screenshot.webp)
 
+<nav role="doc-toc" aria-label="目录">
+<div role="heading" aria-level="2">TOC</div>
+<ul>
+  <li><a href="#user-content-dsh-webviewgtk">dsh-webviewgtk</a>
+    <ul>
+      <li><a href="#user-content-screenshot">Screenshot</a></li>
+      <li><a href="#user-content-dependencies">Dependencies</a></li>
+      <li><a href="#user-content-download">Download</a></li>
+      <li><a href="#user-content-run-directly">Run directly</a></li>
+      <li><a href="#user-content-developer-tools">Developer tools</a></li>
+      <li><a href="#user-content-desktop-notifications">Desktop notifications</a>
+        <ul>
+          <li><a href="#user-content-traps-already-hit-read-before-changing-this-code">Traps already hit (read before changing this code)</a></li>
+          <li><a href="#user-content-diagnostics">Diagnostics</a></li>
+        </ul>
+      </li>
+      <li><a href="#user-content-middle-click-paste">Middle-click paste</a></li>
+      <li><a href="#user-content-installation">Installation</a></li>
+      <li><a href="#user-content-tests">Tests</a></li>
+      <li><a href="#user-content-icon-and-startupwmclass">Icon and StartupWMClass</a></li>
+      <li><a href="#user-content-known-issues">Known issues</a></li>
+    </ul>
+  </li>
+</ul>
+</nav>
+
 ## Dependencies
 
 Debian/Ubuntu:
@@ -138,14 +164,9 @@ terminal. An empty string means GTK could not read the primary selection (on Way
 In the repository directory, run:
 
 ```bash
-pip install . --break-system-packages
+./install.sh
 ```
 
-or:
-
-```bash
-python3 setup.py install --user
-```
 
 After installation, the `dsh-webviewgtk` command will be available, and the following will be installed:
 
