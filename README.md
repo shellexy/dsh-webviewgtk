@@ -19,10 +19,12 @@
 Debian/Ubuntu：
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0
+sudo apt install -y python3-gi gir1.2-webkit-6.0 ; which npx || sudo apt install -y npm
 ```
 
 还需要 `npx` 命令在 `PATH` 中。
+
+如果您之前没有 npx，那么前面那行命令会安装源里的 npm 来提供 npx。
 
 ## 下载
 

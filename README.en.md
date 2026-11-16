@@ -19,7 +19,7 @@ The goal is to always use the latest official dsh version.
 Debian/Ubuntu:
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0
+sudo apt install -y python3-gi gir1.2-webkit-6.0 ; which npx || sudo apt install -y npm
 ```
 
 The `npx` command must also be available in your `PATH`.
